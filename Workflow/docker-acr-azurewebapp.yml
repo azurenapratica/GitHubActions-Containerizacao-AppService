@@ -1,0 +1,53 @@
+name: Azure Container Registry + Azure Web App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGEM_AZURECR: ${{ secrets.AZURECR_REGISTRY }}/siterepos-anp
+
+jobs:
+
+  build-acr:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Login no Azure Container Registry
+      uses: docker/login-action@v1.8.0
+      with:
+        registry: ${{ secrets.AZURECR_REGISTRY }}
+        username: ${{ secrets.AZURECR_USERNAME }}
+        password: ${{ secrets.AZURECR_PASSWORD }}
+
+    - name: Build de imagem e Push no Azure Container Registry
+      run: |
+        cd ./SiteConsultaRepos
+        docker build . --file Dockerfile --tag ${{ env.IMAGEM_AZURECR }}:latest
+        docker tag ${{ env.IMAGEM_AZURECR }}:latest ${{ env.IMAGEM_AZURECR }}:$GITHUB_RUN_NUMBER
+        docker push ${{ env.IMAGEM_AZURECR }}
+
+  deployment-azwebapp:
+    needs: [build-acr]
+
+    env:
+      NOME_WEBAPP: anp-repos
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Azure Login - Conectando com Credenciais no Azure
+      uses: Azure/login@v1.1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Azure WebApp - Deployment da Aplicacao
+      uses: Azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.NOME_WEBAPP }}
+        images: '${{ env.IMAGEM_AZURECR }}:${{ github.run_number }}'
